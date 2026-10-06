@@ -189,8 +189,7 @@ const noProofAssertion: RuleModule = {
     const guarded = new Set<string>(); // local names of gdp-ts and proof types
     const guardedNamespaces = new Set<string>();
 
-    const check = (node: Node) => {
-      const annotation = child(node, "typeAnnotation");
+    const checkType = (annotation: Node | undefined, report: Node, how: string) => {
       if (!annotation) return;
       for (const part of walk(annotation)) {
         if (part.type !== "TSTypeReference") continue;
@@ -200,12 +199,20 @@ const noProofAssertion: RuleModule = {
         if ((direct && guarded.has(direct)) || (namespace && guardedNamespaces.has(namespace))) {
           const shown = direct ?? `${namespace}.${name(child(typeName ?? part, "right")) ?? ""}`;
           context.report({
-            node,
-            message: `Do not assert a proof or Named type (${shown}). Get the proof from its trusted module in proofs/.`,
+            node: report,
+            message: `Do not ${how} a proof or Named type (${shown}). Get the proof from its trusted module in proofs/.`,
           });
           return;
         }
       }
+    };
+
+    const check = (node: Node) => checkType(child(node, "typeAnnotation"), node, "assert");
+    // `let p!: Proof<...>` and `declare const p: Proof<...>` conjure a proof
+    // with no assertion node at all; so does `declare function (): Proof<...>`.
+    const annotationOf = (declarator: Node) => {
+      const id = child(declarator, "id");
+      return id && child(id, "typeAnnotation");
     };
 
     return {
@@ -221,6 +228,79 @@ const noProofAssertion: RuleModule = {
       },
       TSAsExpression: check,
       TSTypeAssertion: check,
+      VariableDeclarator(node) {
+        if (node["definite"] === true) checkType(annotationOf(node), node, "definitely-assign (`!:`)");
+      },
+      VariableDeclaration(node) {
+        if (node["declare"] !== true) return;
+        for (const declarator of children(node, "declarations")) checkType(annotationOf(declarator), declarator, "declare");
+      },
+      TSDeclareFunction(node) {
+        checkType(child(node, "returnType"), node, "declare a function returning");
+      },
+      TSModuleDeclaration(node) {
+        const id = child(node, "id");
+        const moduleName = id?.type === "Literal" && typeof id["value"] === "string" ? (id["value"] as string) : undefined;
+        if (moduleName === PACKAGE || (moduleName && proofImports.some((pattern) => pattern.test(moduleName)))) {
+          context.report({
+            node,
+            message: `Do not augment "${moduleName}": merged members become phantom proof evidence that is undefined at runtime.`,
+          });
+        }
+      },
+    };
+  },
+};
+
+const noNullAssertion: RuleModule = {
+  meta: {
+    type: "problem",
+    docs: { description: "`null!` / `undefined!` fabricate a value of any expected type, including proofs." },
+    schema: [],
+  },
+  create(context) {
+    return {
+      TSNonNullExpression(node) {
+        const expression = child(node, "expression");
+        const isNullLiteral = expression?.type === "Literal" && expression["value"] === null && !("regex" in expression);
+        const isUndefined = name(expression) === "undefined";
+        if (isNullLiteral || isUndefined) {
+          context.report({ node, message: "`null!` fabricates a value of any expected type (including proofs). Return the real value or handle the null." });
+        }
+      },
+    };
+  },
+};
+
+const REBIND_KEY = "value";
+
+const noNameRebind: RuleModule = {
+  meta: {
+    type: "problem",
+    docs: {
+      description:
+        "Spreading an object while overriding `value` can transplant a Named value's compile-time name onto a different runtime value.",
+    },
+    schema: [],
+  },
+  create(context) {
+    return {
+      ObjectExpression(node) {
+        const properties = children(node, "properties");
+        if (!properties.some((p) => p.type === "SpreadElement")) return;
+        for (const property of properties) {
+          if (property.type !== "Property" || property["computed"] === true) continue;
+          const key = child(property, "key");
+          const keyName = name(key) ?? (key?.type === "Literal" ? key["value"] : undefined);
+          if (keyName === REBIND_KEY) {
+            context.report({
+              node: property,
+              message:
+                "Do not spread and override `value`: if the object is a Named, this rebinds its name (and every proof about it) to a different value. Call name() on the new value instead.",
+            });
+          }
+        }
+      },
     };
   },
 };
@@ -265,6 +345,8 @@ export const rules = {
   "no-define-proof": noDefineProof,
   "no-exported-prover": noExportedProver,
   "no-proof-assertion": noProofAssertion,
+  "no-null-assertion": noNullAssertion,
+  "no-name-rebind": noNameRebind,
   "no-type-assertion": noTypeAssertion,
   "no-any": noAny,
 };

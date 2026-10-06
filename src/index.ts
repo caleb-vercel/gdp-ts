@@ -21,9 +21,13 @@
  *    cannot be called with a proof about a different project or user, with a
  *    raw id, or with no proof at all.
  *
- * Nothing here is a theorem prover. The guarantee is practical: the honest path
- * never needs a type assertion, so forging a proof requires `as`/`any`, which
- * you can lint for and which stands out in review.
+ * Nothing here is a theorem prover. The guarantee is practical: the honest
+ * path never needs a type assertion, so forging a proof requires `as`/`any`
+ * or one of a short list of equivalent constructs (`let p!:`, `declare`,
+ * `null!`, module augmentation, spread-rebinding a `Named`) — all of which
+ * the lint preset flags. What neither the types nor the lint can see is an
+ * `any` that arrives from outside (`JSON.parse`, an untyped `req.body`):
+ * keep those away from proof parameters. See the skill's limits.md.
  */
 
 declare const NAME: unique symbol;
@@ -112,7 +116,12 @@ export function name(...args: unknown[]): unknown {
 export interface Proof<in out Kind extends string, in out About extends readonly unknown[]> {
   readonly kind: Kind;
   // Phantom, structurally invariant for the same reason as `Named[NAME]`.
-  readonly [ABOUT]: (about: About) => About;
+  // `kind` appears as a parameter so the slot also pins the proof's Kind:
+  // without it, `{ ...weakProof, kind: "StrongKind" }` would spread a valid
+  // `[ABOUT]` slot (it depends only on `About`) and typecheck as an escalated
+  // proof. With it, the copied slot's contravariant `kind` parameter rejects
+  // the different kind.
+  readonly [ABOUT]: (about: About, kind: Kind) => About;
 }
 
 /** The names of a tuple of `Named` values: `[Named<U, X>, Named<P, Y>]` -> `[U, P]`. */
