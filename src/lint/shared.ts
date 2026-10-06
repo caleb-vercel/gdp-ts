@@ -47,6 +47,7 @@ export function scopes(options: GdpLintOptions = {}): Scoped[] {
       [rule("no-define-proof")]: "error",
       [rule("no-proof-assertion")]: proofImports ? ["error", { proofImports }] : "error",
       [rule("no-null-assertion")]: "error",
+      [rule("no-name-rebind")]: "error",
       ...(strict ? { [rule("no-type-assertion")]: "error", [rule("no-any")]: "error" } : {}),
     },
   };
@@ -56,6 +57,7 @@ export function scopes(options: GdpLintOptions = {}): Scoped[] {
       [rule("no-define-proof")]: "off",
       [rule("no-proof-assertion")]: "off",
       [rule("no-null-assertion")]: "off",
+      [rule("no-name-rebind")]: "off",
       [rule("no-type-assertion")]: "off",
       [rule("no-any")]: "off",
       [rule("no-exported-prover")]: "error",

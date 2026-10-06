@@ -108,6 +108,13 @@ export const lintCases: LintCase[] = [
     strict: [r("no-null-assertion")],
   },
   {
+    name: "spreading an object while overriding `value`",
+    filePath: "src/app.ts",
+    code: `export const rebind = (a: { readonly value: string }, next: string) => ({ ...a, value: next });\n`,
+    targeted: [r("no-name-rebind")],
+    strict: [r("no-name-rebind")],
+  },
+  {
     name: "augmenting the gdp-ts module",
     filePath: "src/app.ts",
     code: `declare module "@gdp-ts/core" {\n  interface Proof<in out Kind extends string, in out About extends readonly unknown[]> {\n    readonly escalated: 1;\n  }\n}\nexport {};\n`,
@@ -158,6 +165,13 @@ export const lintCases: LintCase[] = [
     name: "assertions inside a trusted module",
     filePath: "src/proofs/internal.ts",
     code: `export const raw = JSON.parse("{}") as unknown;\n`,
+    targeted: [],
+    strict: [],
+  },
+  {
+    name: "spread with a `value` override inside a trusted module",
+    filePath: "src/proofs/evidence.ts",
+    code: `export const widen = (a: { readonly value: string }) => ({ ...a, value: a.value.trim() });\n`,
     targeted: [],
     strict: [],
   },
